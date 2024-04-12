@@ -52,17 +52,24 @@ configure_logging()
 def normalize_text(text):
     """ Normalize text by removing non-alphanumeric characters and converting to lower case. """
     return re.sub(r'\W+', '', text).lower()
-def calculate_similarity(text, keywords):
-    """Calculate the highest similarity score between text and any of the keywords."""
+def calculate_similarity(text, keyword, threshold=0.8):
+    """Calculate the similarity score between text and keyword allowing for partial matches."""
+    # Normalize and prepare both text and keyword
     normalized_text = normalize_text(text)
-    highest_ratio = 0
-    for keyword in keywords:
-        normalized_keyword = normalize_text(keyword)
-        sequence_matcher = SequenceMatcher(None, normalized_text, normalized_keyword)
-        ratio = sequence_matcher.ratio()
-        if ratio > highest_ratio:
-            highest_ratio = ratio
-    return highest_ratio
+    normalized_keyword = normalize_text(keyword)
+
+    sequence_matcher = SequenceMatcher(None, normalized_text, normalized_keyword)
+    match = sequence_matcher.find_longest_match(0, len(normalized_text), 0, len(normalized_keyword))
+
+    # Calculate the ratio of the longest match to the length of the keyword
+    if match.size == 0:
+        return 0  # No match at all
+    match_ratio = match.size / len(normalized_keyword)
+
+    # Check if the match ratio meets the threshold
+    if match_ratio >= threshold:
+        return match_ratio  # Return the match ratio as percentage if it meets or exceeds the threshold
+    return 0  # Return 0 if the match ratio is below the threshold
 
 
 
@@ -94,32 +101,43 @@ async def process_and_export_message(client, message, keywords, pattern):
                 return
 
             largest_photo = max(valid_sizes, key=lambda size: size.size)
-            file_path = await client.download_media(message.media, file=os.path.join(IMAGES_DIR, f"{message.id}_{largest_photo.type}.jpg"))
+            file_path = await client.download_media(message.media, file=os.path.join(IMAGES_DIR,
+                                                                                     f"{message.id}_{largest_photo.type}.jpg"))
             if file_path:
                 processed_image_path = await process_image_for_ocr(file_path)
                 if processed_image_path:
                     extracted_text = extract_text(processed_image_path)
-                    if extracted_text and (not pattern or pattern.search(extracted_text)):
-                        similarity = calculate_similarity(extracted_text, keywords) if keywords else None
-                        message_data = {
-                            'Message Time': str(message.date),
-                            'Sender ID': message.sender_id,
-                            'Text': extracted_text,
-                            'Message ID': message.id,
-                            'Chat ID': message.chat_id,
-                            'Message Link': generate_message_shortcut(message),
-                            'Local Image Path': processed_image_path,
-                            'Accuracy': f"{similarity * 100:.2f}%" if similarity else "N/A"
-                        }
-                        await export_message_data(message_data, export_format='json')
-                        # Image meets criteria, do not delete
+                    found_match = False  # Flag to determine if a match was found
+                    if extracted_text:
+                        for keyword in keywords:
+                            similarity = calculate_similarity(extracted_text, keyword)
+                            if similarity > 0:
+                                found_match = True
+                                message_data = {
+                                    'Message Time': str(message.date),
+                                    'Sender ID': message.sender_id,
+                                    'Text': extracted_text,
+                                    'Message ID': message.id,
+                                    'Chat ID': message.chat_id,
+                                    'Message Link': generate_message_shortcut(message),
+                                    'Local Image Path': processed_image_path,
+                                    'Accuracy': f"{similarity * 100:.2f}%"
+                                }
+                                await export_message_data(message_data, export_format='json')
+                                break  # Stop after the first match
+
+                        if not found_match:
+                            # If no match is found, then remove the image
+                            await clean_up_image(processed_image_path)
+                            logging.info(
+                                f"Image removed due to insufficient text or keyword match: {processed_image_path}")
                     else:
-                        # Image does not meet criteria, delete both original and processed
+                        logging.info("No text extracted from image.")
                         await clean_up_image(processed_image_path)
-                        await clean_up_image(file_path)
-                        logging.info(f"Image and processed file removed due to insufficient text or keyword match: {processed_image_path}")
                 else:
                     logging.error("Failed to process image for OCR.")
+                if not found_match:
+                    # Clean up original image if no match was found
                     await clean_up_image(file_path)
             else:
                 logging.error(f"Failed to download image for message {message.id}.")
