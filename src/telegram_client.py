@@ -145,6 +145,9 @@ async def main():
             group_input = input("Enter the Group ID or Link to scan: ")
             keywords = input("Enter keywords to filter by (comma-separated): ").split(',')
             print("Activity is logged, please check telegram_ocr.log for details.")
+            print("Check export.json for exported message details.")
+            if mode == 'r':
+                print("Client Started. Listening for incoming messages...")
             await data_analysis(client, group_input, keywords, mode)
             break
         else:
