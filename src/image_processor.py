@@ -31,58 +31,25 @@ if not image_logger.hasHandlers():
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
     file_handler.setFormatter(formatter)
     image_logger.addHandler(file_handler)
-
-
-def preprocess_image(image_path):
-    """Apply advanced image processing to improve OCR accuracy."""
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-
-    # Noise reduction with a median filter
-    img = cv2.medianBlur(img, 5)
-
-    # Adaptive Thresholding
-    img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                cv2.THRESH_BINARY, 11, 2)
-
-    # Morphological opening to remove noise
-    kernel = np.ones((1, 1), np.uint8)
-    img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
-
-    # Save the processed image
-    processed_image_path = os.path.splitext(image_path)[0] + "_processed.jpg"
-    cv2.imwrite(processed_image_path, img)
-    return processed_image_path
-
-
 async def process_image_for_ocr(image_path):
     """
-    Asynchronously enhances an image for better OCR results. This includes converting it to grayscale,
-    adjusting contrast, applying a mild sharpening filter, and binarizing the image.
-    Saves the processed images in a dedicated directory.
+    Asynchronously enhances an image for better OCR results by converting it to grayscale,
+    increasing contrast, and applying filters. Saves the processed image in a dedicated directory.
     """
     try:
+        # Use asyncio to open the image asynchronously if available or run_in_executor for synchronous PIL methods
         loop = asyncio.get_event_loop()
         image = await loop.run_in_executor(None, Image.open, image_path)
+
         logger.info(f"Processing image for OCR: {image_path}")
 
-        # Process image: Convert to grayscale
-        processed_image = image.convert('L')
+        image = image.convert('L')
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.0)
+        image = image.filter(ImageFilter.SHARPEN)
 
-        # Enhance contrast
-        enhancer = ImageEnhance.Contrast(processed_image)
-        processed_image = enhancer.enhance(2.0)  # Adjust this value based on results
-
-        # Apply sharpening
-        processed_image = processed_image.filter(ImageFilter.SHARPEN)
-
-        # Binarize using a threshold after converting to a numpy array
-        processed_image_np = np.array(processed_image)
-        _, processed_image_np = cv2.threshold(processed_image_np, 128, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        processed_image = Image.fromarray(processed_image_np)
-
-        # Save the processed image
         processed_image_path = os.path.join(IMAGES_DIR, 'processed_' + os.path.basename(image_path))
-        await loop.run_in_executor(None, processed_image.save, processed_image_path)
+        await loop.run_in_executor(None, image.save, processed_image_path)
         logger.info(f"Processed image saved: {processed_image_path}")
 
         return processed_image_path
@@ -109,14 +76,3 @@ def is_image_clear(image_path):
     except Exception as e:
         logger.error(f"Error checking clarity of image {image_path}: {e}")
         return False
-
-async def clean_up_image(*image_paths):
-    for image_path in image_paths:
-        try:
-            if os.path.exists(image_path):
-                os.remove(image_path)
-                logging.info(f"Successfully cleaned up image {image_path}")
-            else:
-                logging.warning(f"Image file not found: {image_path}")
-        except Exception as e:
-            logging.error(f"Failed to clean up image {image_path}: {e}")
