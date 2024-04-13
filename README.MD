@@ -45,7 +45,7 @@ To view the Apache License 2.0 under which Tesseract OCR is distributed, please 
 We extend our gratitude to the Tesseract OCR developers and contributors for their hard work and dedication to creating and maintaining this invaluable tool.
 
 ## Additional Language Support 
-By default, Tesseract OCR in this project is configured to support English (`eng`) and Orientation and Script Detection (`osd`). However, you can enhance the application's language recognition capabilities by downloading additional language data files. For example, to process images with Hebrew, Russian, or Arabic text, you may add the respective language files from the [Tesseract OCR GitHub repository] (https://github.com/tesseract-ocr/tessdata/tree/main)
+By default, Tesseract OCR in this project is configured to support English (`eng`) and Orientation and Script Detection (`osd`). However, you can enhance the application's language recognition capabilities by downloading additional language data files. For example, to process images with Hebrew, Russian, or Arabic text, you may add the respective language files from the [Tesseract OCR GitHub repository](https://github.com/tesseract-ocr/tessdata/tree/main)
 
 ## Contributing 
 We welcome contributions! If you're interested in enhancing the Telegram OCR Project, please read our contributing guidelines and submit pull requests to our repository.
